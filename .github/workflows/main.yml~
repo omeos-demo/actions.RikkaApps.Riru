@@ -9,26 +9,21 @@ on:
   workflow_dispatch:
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     if: ${{ !startsWith(github.event.head_commit.message, '[skip ci]') }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
         with:
-          repository: 'RikkaApps/Riru'
-          ref: '${{ github.ref }}'
           submodules: 'recursive'
           fetch-depth: 0
-      - run: |
-          git tag --list v26.1.7 | grep -q -e . || git tag --create-reflog --no-edit v26.1.7 ab3086ec9fdadc5d6eab86998f557f87de204280
       - name: set up JDK 11
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v1
         with:
-          distribution: 'zulu'
           java-version: 11
       - name: Cache Gradle Dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v2
         with:
           path: |
             ~/.gradle/caches
@@ -38,7 +33,7 @@ jobs:
           restore-keys: |
             gradle-deps
       - name: Cache Gradle Build
-        uses: actions/cache@v4
+        uses: actions/cache@v2
         with:
           path: |
             ~/.gradle/caches/build-cache-*
@@ -46,7 +41,7 @@ jobs:
           restore-keys: |
             gradle-builds
       - name: Cache Ccache
-        uses: actions/cache@v4
+        uses: actions/cache@v2
         with:
           path: ~/.ccache
           key: ccache-cache-${{ github.sha }}
@@ -71,56 +66,23 @@ jobs:
         if: success()
         id: prepareArtifact
         run: |
-          releaseName=`ls out/riru-*-release.zip | awk -F '(/|.zip)' '{print $2}'` && echo "releaseName=$releaseName" >> $GITHUB_OUTPUT
-          debugName=`ls out/riru-*-debug.zip | awk -F '(/|.zip)' '{print $2}'` && echo "debugName=$debugName" >> $GITHUB_OUTPUT
+          releaseName=`ls out/riru-*-release.zip | awk -F '(/|.zip)' '{print $2}'` && echo "::set-output name=releaseName::$releaseName"
+          debugName=`ls out/riru-*-debug.zip | awk -F '(/|.zip)' '{print $2}'` && echo "::set-output name=debugName::$debugName"
           unzip out/riru-*-release.zip -d riru-release
           unzip out/riru-*-debug.zip -d riru-debug
       - name: Upload release
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.prepareArtifact.outputs.releaseName }}
           path: './riru-release/*'
       - name: Upload debug
         #      if: ${{ github.event_name == 'pull_request' && success() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.prepareArtifact.outputs.debugName }}
           path: './riru-debug/*'
       - name: Upload mappings
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v2
         with:
           name: mappings
           path: "riru/build/outputs/mapping/release"
-
-      - name: '[DEBUG] Dump environment info'
-        if: '${{ ! cancelled() }}'
-        run: |
-          uname -a && set && (
-            printf %s '{'
-            printf %s '"github":${{ toJson(github) }},'
-            printf %s '"env":${{ toJson(env) }},'
-            printf %s '"vars":${{ toJson(vars) }},'
-            printf %s '"job":${{ toJson(job) }},'
-            printf %s '"steps":${{ toJson(steps) }},'
-            printf %s '"runner":${{ toJson(runner) }},'
-            printf %s '"secrets":${{ toJson(secrets) }},'
-            printf %s '"strategy":${{ toJson(strategy) }},'
-            printf %s '"matrix":${{ toJson(matrix) }},'
-            printf %s '"needs":${{ toJson(needs) }},'
-            printf %s '"inputs":${{ toJson(inputs) }}'
-            printf %s '}'
-          ) | if (
-            : | sudo apt-get install -y jq
-          ); then
-            jq -rMS .
-          else
-            cat
-          fi
-      - name: '[DEBUG] Upload workspace caches'
-        if: '${{ ! cancelled() }}'
-        uses: 'actions/upload-artifact@v4'
-        with:
-          name: '${{ github.repository_owner_id }}-${{ github.repository_id }}-${{ github.sha }}'
-          path: '${{ runner.workspace }}'
-          compression-level: 9
-          include-hidden-files: true
